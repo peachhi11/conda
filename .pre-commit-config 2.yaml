@@ -1,0 +1,126 @@
+# disable autofixing PRs, commenting "pre-commit.ci autofix" on a pull request triggers a autofix
+ci:
+  autofix_prs: false
+  autoupdate_schedule: quarterly
+# generally speaking we ignore all vendored code as well as tests data
+# ignore patches/diffs since slight reformatting can break them
+exclude: |
+  (?x)^(
+    conda/auxlib |
+    tests/data/(
+      conda_format_repo |
+      env_metadata/.+ |
+      legacy_repodata |
+      repodata |
+      tar_traversal |
+      corrupt
+    ) |
+    .*\.(patch|diff) |
+    tools/vendoring/patches
+  )/
+repos:
+  # generic verification and formatting
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      # standard end of line/end of file cleanup
+      - id: mixed-line-ending
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      # ensure syntaxes are valid
+      - id: check-toml
+      - id: check-yaml
+        exclude: |
+          (?x)^(
+            (conda\.)?recipe/meta.yaml |
+            tests/data/recipes/font-ttf-inconsolata/meta.yaml |
+            tests/data/recipes/dependent/meta.yaml
+          )
+      # catch git merge/rebase problems
+      - id: check-merge-conflict
+      # sort requirements files
+      - id: file-contents-sorter
+        files: |
+          (?x)^(
+            docs/requirements.txt |
+            tests/requirements.*\.txt
+          )
+        args: [--unique]
+      - id: pretty-format-json
+        args: [--autofix]
+        files: tests/data/test-recipes/.+/repodata\.json
+  # Python verification and formatting
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: ad1b27d73581aa16cca06fc4a0761fc563ffe8e8  # frozen: v1.5.6
+    hooks:
+      # auto inject license blurb
+      - id: insert-license
+        files: \.py$
+        exclude: |
+          (?x)^(
+            conda/gateways/connection/adapters/ftp.py |  # Apache 2.0
+            conda/gateways/disk/link.py  # MIT
+          )$
+        args: [--license-filepath, .github/disclaimer.txt, --no-extra-eol]
+  - repo: https://github.com/adamchainz/blacken-docs
+    rev: fda77690955e9b63c6687d8806bafd56a526e45f  # frozen: 1.20.0
+    hooks:
+      # auto format Python codes within docstrings
+      - id: blacken-docs
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: b831c3dc5d27d9da294ae4e915773b99aa24a7c5  # frozen: v0.15.10
+    hooks:
+      # lint & attempt to correct failures (e.g. pyupgrade)
+      - id: ruff-check
+        args: [--fix]
+      # compatible replacement for black
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: generate-test-recipes-readme
+        name: Generate test recipes README
+        entry: python tests/data/recipes/generate_recipes_readme.py
+        language: python
+        language_version: python3.14
+        additional_dependencies: [pyyaml]
+        pass_filenames: false
+        files: |
+          (?x)^(
+            tests/data/recipes/.+/meta.yaml |
+            tests/data/recipes/generate_recipes_readme.py |
+            tests/data/recipes/README.md
+          )$
+      # sphinx-autoapi doesn't support #: comments, use trailing docstrings instead
+      - id: no-sphinx-autodoc-comments
+        name: 'Disallow #: comments, require trailing docstrings'
+        entry: '^\s*#:'
+        language: pygrep
+        types: [python]
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: 4380fbb73a154b5f5624794c1c78d9719ccc860f  # frozen: v2.16.0
+    hooks:
+      - id: pretty-format-toml
+        args: [--autofix, --trailing-commas]
+  - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
+    rev: 8d1b9cadaf854cb25bb0b0f5870e1cc66a083d6b  # frozen: 0.2.3
+    hooks:
+      - id: yamlfmt
+        # ruamel.yaml doesn't line wrap correctly (?) so set width to 1M to avoid issues
+        args: [--mapping=2, --offset=2, --sequence=4, --width=1000000, --implicit_start]
+        exclude: |
+          (?x)^(
+            .authors.yml |
+            recipe/meta.yaml |
+            tests/
+          )
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 13614ab716a3113145f1294ed259d9fbe5678ff3  # frozen: 0.37.1
+    hooks:
+      # verify github syntaxes
+      - id: check-github-workflows
+      - id: check-dependabot
+  - repo: meta
+    # see https://pre-commit.com/#meta-hooks
+    hooks:
+      - id: check-hooks-apply
+      - id: check-useless-excludes
